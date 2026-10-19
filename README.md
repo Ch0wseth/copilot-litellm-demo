@@ -3,6 +3,17 @@ title: "GitHub Copilot + LiteLLM : demo locale pas a pas"
 description: "Deployer et tester Ollama, LiteLLM, les cles individuelles, Copilot CLI et VS Code."
 ---
 
+## Guides disponibles
+
+| Sujet                         | Guide                                                     | Etat                                                  |
+|-------------------------------|-----------------------------------------------------------|-------------------------------------------------------|
+| LiteLLM et cles individuelles  | Etapes ci-dessous                                         | CLI valide ; parcours VS Code manuel                  |
+| OpenTelemetry et Grafana      | [Guide d'observabilite](observability/README.md)             | Stack deployee ; traces/metriques CLI validees         |
+| Webhooks globaux GitHub        | [Reponse et scenario webhook](webhooks/README.md)           | Documentation ; demo a executer sur environnement test |
+| Compte technique et API admin  | [Reponse et scenario API](admin-api/README.md)               | Documentation ; demo en lecture seule a executer       |
+
+Les deux derniers guides ne creent aucun compte, webhook ou acces administrateur.
+
 ## Ce que vous allez montrer
 
 Pour la demo complementaire **OpenTelemetry + Grafana**, suivez le
@@ -27,7 +38,8 @@ Ollama (127.0.0.1:11434) ---> Qwen 3 4B, alias qwen3:4b-8k
 Cette demo illustre une passerelle et des cles par utilisateur, pas un deploiement
 centralise de la politique BYOK d'une entreprise GitHub. L'alias d'une cle est une
 etiquette de demo, pas une preuve d'identite GitHub ou une integration SSO.
-Grafana, les webhooks et les API d'administration GitHub ne font pas partie de cette stack.
+Le Compose principal ne comprend ni Grafana, ni recepteur webhook, ni service
+d'administration GitHub. Grafana est fourni par la stack separee `observability`.
 
 > [!IMPORTANT]
 > La configuration VS Code concerne le Chat BYOK. Elle ne remplace pas les
