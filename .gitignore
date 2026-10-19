@@ -1,6 +1,5 @@
 .env
 .env.*
-!.env.example
 *.log
 .vscode/
 Thumbs.db
