@@ -1,153 +1,353 @@
-# GitHub Copilot + LiteLLM (local demo)
+---
+title: "GitHub Copilot + LiteLLM : demo locale pas a pas"
+description: "Deployer et tester Ollama, LiteLLM, les cles individuelles, Copilot CLI et VS Code."
+---
 
-This demo connects **GitHub Copilot CLI** and **VS Code Chat** to a locally hosted LiteLLM proxy, which routes requests to the open-source Qwen 3 4B model running locally through Ollama.
+## Ce que vous allez montrer
+
+Un modele open source Qwen 3 4B tourne sur votre machine avec Ollama.
+LiteLLM expose une API compatible OpenAI et fournit une cle virtuelle distincte
+pour chaque utilisateur. Copilot CLI et le Chat de VS Code appellent cette API.
 
 ```text
-Copilot CLI / VS Code
-        │  OpenAI-compatible Chat Completions
-        ▼
-LiteLLM proxy (localhost:4000)
-        │  individual LiteLLM virtual key
-        ▼
-Ollama (localhost:11434) → Qwen 3 4B
+Copilot CLI / VS Code Chat
+        |
+        | cle virtuelle individuelle
+        v
+LiteLLM (127.0.0.1:4000) ---> PostgreSQL (cles et configuration)
+        |
+        v
+Ollama (127.0.0.1:11434) ---> Qwen 3 4B, alias qwen3:4b-8k
 ```
 
-The setup is local-only: Docker ports bind to loopback, the model runs on the machine, and no external model-provider API key is needed. Docker must download the container images and model weights on first start.
+Cette demo illustre une passerelle et des cles par utilisateur, pas un deploiement
+centralise de la politique BYOK d'une entreprise GitHub. L'alias d'une cle est une
+etiquette de demo, pas une preuve d'identite GitHub ou une integration SSO.
+Grafana, les webhooks et les API d'administration GitHub ne font pas partie de cette stack.
 
-## What is demonstrated
+> [!IMPORTANT]
+> La configuration VS Code concerne le Chat BYOK. Elle ne remplace pas les
+> suggestions de code inline de Copilot, la recherche semantique ou les embeddings.
+> Le parcours VS Code reste a valider manuellement dans votre interface.
 
-- A self-hosted LiteLLM OpenAI-compatible endpoint.
-- A separate, model-restricted LiteLLM virtual key for each demo user.
-- Copilot CLI configured with the user's LiteLLM key through environment variables.
-- VS Code configured with the **Custom Endpoint** BYOK provider and the same user's key stored through VS Code's input/secret mechanism.
+## 1. Verifier les prerequis
 
-The Copilot CLI path was tested end-to-end in this environment. The VS Code configuration is included, but has **not** been live-tested here; validate it in your VS Code installation and policy context.
+Utilisez un terminal PowerShell 7.4 ou plus recent, avec Docker Desktop demarre
+en mode conteneurs Linux. Copilot CLI est necessaire pour le test CLI, VS Code
+pour le parcours graphique. Prevoyez plusieurs Go de disque et de RAM disponibles.
+Les poids du modele seuls representent environ 2,5 Go.
 
-## Requirements
+Si le depot est deja clone, placez-vous a sa racine. Pour un premier clone
+du depot prive, authentifiez GitHub CLI avec votre compte autorise, puis lancez :
 
-- Windows 10/11 with PowerShell 7 recommended.
-- Docker Desktop running with Linux containers enabled.
-- GitHub Copilot CLI installed (`copilot` on `PATH`) for the CLI walkthrough.
-- A current VS Code release with Chat and the Custom Endpoint provider available for the VS Code walkthrough.
-- Several gigabytes of free disk space and RAM. The Qwen 3 model download is about 2.5 GB.
+```powershell
+gh repo clone Ch0wseth/copilot-litellm-demo
+Set-Location .\copilot-litellm-demo
+```
 
-## Start the local stack
+Verifiez les outils :
 
-From this repository in PowerShell:
+```powershell
+$PSVersionTable.PSVersion
+docker context show
+docker info --format '{{.ServerVersion}}'
+copilot --version
+code --version
+```
+
+Sur Docker Desktop Windows, utilisez le contexte Linux pour ce terminal :
+
+```powershell
+$env:DOCKER_CONTEXT = 'desktop-linux'
+```
+
+Les commandes suivantes se lancent toutes depuis la racine du depot.
+Gardez Docker Desktop ouvert pendant la demo.
+
+## 2. Deployer la stack locale
 
 ```powershell
 .\scripts\start-demo.ps1
 ```
 
-The script generates local random credentials in `.env` (ignored by Git), starts PostgreSQL, Ollama, and LiteLLM, downloads the Qwen 3 model on first run, creates an 8K-context model alias, then checks that LiteLLM exposes it.
+Le premier lancement telecharge les images et le modele. Il peut prendre plusieurs
+minutes selon le reseau et la machine. Le script genere `.env` s'il est absent,
+demarre PostgreSQL et Ollama, cree l'alias `qwen3:4b-8k`, puis demarre LiteLLM.
 
-Services:
+Attendez le message :
 
-- LiteLLM API: `http://127.0.0.1:4000`
-- LiteLLM Admin UI: `http://127.0.0.1:4000/ui`
-- Ollama API: `http://127.0.0.1:11434`
-
-The LiteLLM master key is stored in the ignored `.env` file. This is an admin credential; do not paste it into Copilot, VS Code, a ticket, or a commit.
-
-## Create an individual user key
-
-Each participant should use a separate virtual key, not the LiteLLM master key:
-
-```powershell
-.\scripts\new-user-key.ps1 -Alias alice
+```text
+Demo ready: LiteLLM http://127.0.0.1:4000; Ollama http://127.0.0.1:11434
 ```
 
-The command prints the new key once. Keep it private. It is restricted to the `qwen3:4b-8k` model. Create a separate key for each user so LiteLLM can distinguish and revoke keys independently.
-
-Set the returned key in the current PowerShell process (replace the example value):
+Verifiez ensuite :
 
 ```powershell
-$env:LITELLM_USER_KEY = "sk-<your-individual-key>"
+docker compose ps
+docker compose exec -T ollama ollama list
 ```
 
-This environment variable is process-local. Do not place a real key in this repository or save it in a shared shell profile.
+Resultat attendu : trois services demarres, PostgreSQL `healthy`,
+et le modele `qwen3:4b-8k` present dans Ollama.
 
-## GitHub Copilot CLI
+Les API sont accessibles sur <http://127.0.0.1:4000> pour LiteLLM et
+<http://127.0.0.1:11434> pour Ollama. PostgreSQL n'est pas publie sur l'hote.
 
-Launch Copilot with the individual key:
+> [!WARNING]
+> `.env` contient la cle d'administration LiteLLM et les secrets PostgreSQL.
+> Ne l'affichez pas pendant un partage d'ecran. Ne le commitez pas.
+> Les anciennes cles utilisateur ne fonctionnent plus apres suppression du
+> volume PostgreSQL : recreez-les a l'etape suivante.
+
+## 3. Creer une cle individuelle sans l'afficher
+
+Dans le meme terminal :
 
 ```powershell
-.\scripts\run-copilot-cli.ps1
+$env:LITELLM_USER_KEY = .\scripts\new-user-key.ps1 -Alias demo-cli
 ```
 
-You can pass normal Copilot CLI arguments, for example:
+Le script affiche une confirmation, mais la cle retournee est capturee directement
+dans la variable d'environnement du terminal. Ne tapez pas cette variable seule :
+cela afficherait le secret.
+
+La cle est limitee au modele `qwen3:4b-8k`. Chaque execution cree une nouvelle cle.
+Pour un second utilisateur, choisissez un autre alias et un autre terminal.
+Une cle n'est pas un compte GitHub et son alias ne verifie pas l'identite du porteur.
+
+Dans un nouveau terminal, recreez une cle ou saisissez une cle existante sans
+l'inscrire dans l'historique :
 
 ```powershell
-.\scripts\run-copilot-cli.ps1 --prompt "Explain this sample project"
+$env:LITELLM_USER_KEY = Read-Host 'Cle individuelle LiteLLM' -MaskInput
 ```
 
-The launcher sets and then restores the `COPILOT_PROVIDER_*` variables for the Copilot process. The important settings are:
+## 4. Executer les tests automatiques
+
+Pour tester l'API uniquement :
+
+```powershell
+.\scripts\test-demo.ps1
+```
+
+Pour ajouter le test Copilot CLI :
+
+```powershell
+.\scripts\test-demo.ps1 -IncludeCopilot
+```
+
+Les controles doivent afficher `PASS` pour :
+
+- La decouverte du modele avec la cle individuelle
+- Le refus d'une cle invalide avec HTTP `401`
+- Une reponse exacte `LITELLM_API_OK` du modele local
+- Une reponse en streaming avec le marqueur et l'evenement final `[DONE]`
+- Une reponse exacte `COPILOT_VIA_LITELLM_OK` si le test CLI est demande
+
+Le script s'arrete en erreur si un controle echoue. Le test CLI desactive les
+instructions personnalisees et les MCP integres pour limiter le contexte du
+petit modele. Il ne valide ni une session agent complexe ni l'interface VS Code.
+Le premier appel peut etre plus lent, car Ollama charge le modele en memoire.
+
+### Verification realisee le 19 octobre 2026
+
+Apres suppression puis recreation des images et des volumes Docker, les tests
+de decouverte, refus de cle invalide, inference, streaming et Copilot CLI ont
+tous reussi. Le test de revocation a aussi confirme HTTP `200` avant suppression
+de la cle, puis HTTP `401` apres. Le parcours dans l'interface VS Code n'a pas
+ete execute ; suivez l'etape 6 pour le valider sur votre installation.
+
+## 5. Faire la demo dans Copilot CLI
+
+Lancez un appel court :
+
+```powershell
+.\scripts\run-copilot-cli.ps1 --no-custom-instructions --disable-builtin-mcps --silent --prompt '/no_think Reply with exactly COPILOT_VIA_LITELLM_OK and nothing else. Do not use tools.'
+```
+
+Resultat attendu :
+
+```text
+COPILOT_VIA_LITELLM_OK
+```
+
+Puis ouvrez une session interactive :
+
+```powershell
+.\scripts\run-copilot-cli.ps1 --no-custom-instructions --disable-builtin-mcps
+```
+
+Exemple de prompt :
+
+```text
+/no_think Explique en trois phrases le role d'un proxy LiteLLM. N'utilise aucun outil.
+```
+
+Le lanceur configure le fournisseur uniquement pour le processus Copilot puis
+restaure les anciennes variables du terminal. Ses reglages sont :
 
 ```text
 COPILOT_PROVIDER_BASE_URL=http://127.0.0.1:4000/v1
 COPILOT_PROVIDER_TYPE=openai
-COPILOT_PROVIDER_API_KEY=<individual LiteLLM key>
+COPILOT_PROVIDER_API_KEY=<cle individuelle, jamais la master key>
 COPILOT_MODEL=qwen3:4b-8k
+COPILOT_PROVIDER_MODEL_ID=gpt-4.1
+COPILOT_PROVIDER_WIRE_MODEL=qwen3:4b-8k
 ```
 
-The launcher limits the available Copilot tool surface to `view` to keep this small local-model demo focused. Remove `--available-tools view` in `scripts/run-copilot-cli.ps1` if you explicitly want to test additional tools and your model can handle their context.
+`gpt-4.1` sert ici d'identifiant de compatibilite pour le client CLI.
+Le modele demande a LiteLLM reste **Qwen 3**, pas GPT-4.1.
+Les clients reservent 512 tokens de sortie dans les 8192 tokens de contexte :
+le budget d'entree est donc de 7680 tokens.
+Le lanceur limite les outils disponibles a `view`. Un modele local de 4B avec
+8K de contexte n'est pas representatif des capacites des modeles Copilot heberges.
+GitHub recommande au moins 128K de contexte pour les meilleurs resultats CLI.
 
-## VS Code Chat
+## 6. Faire la demo dans VS Code
 
-The VS Code path is separate from CLI environment-variable configuration. VS Code uses its **Custom Endpoint** BYOK provider:
+La configuration du CLI ne configure pas VS Code. Creez une deuxieme cle,
+dans le terminal PowerShell, puis copiez-la dans le presse-papiers sans l'afficher :
 
-1. Start the local stack and generate an individual LiteLLM virtual key as above.
-2. Open this folder in VS Code (`code .` from the repository directory).
-3. In VS Code, open the Chat model picker and choose **Manage Language Models** (or run **Chat: Manage Language Models** from the Command Palette).
-4. Select **Add Models → Custom Endpoint**.
-5. Enter a group name such as `LiteLLM local`, paste the *individual virtual key* (not the master key), and choose **Chat Completions**.
-6. When VS Code opens its `chatLanguageModels.json`, use [`vscode/chatLanguageModels.json`](vscode/chatLanguageModels.json) as a reference for the provider/model entry. Keep the API key as an input variable; do not paste a raw key into a repository file.
-7. Save the configuration, reopen the model picker, and select **Qwen 3 4B via LiteLLM**. Restart VS Code if the model does not appear.
-8. Send a short prompt. Confirm a request appears in LiteLLM's logs:
+```powershell
+$vscodeKey = .\scripts\new-user-key.ps1 -Alias demo-vscode
+Set-Clipboard -Value $vscodeKey
+code .
+```
 
-   ```powershell
-   docker compose logs -f litellm
-   ```
+Dans VS Code :
 
-The example's `${input:litellmApiKey}` placeholder makes VS Code request the key through its input mechanism. The endpoint URL intentionally includes the complete `/v1/chat/completions` API path. Add the provider through VS Code's **Custom Endpoint** flow before using the reference entry; the sample file under `vscode/` is not automatically loaded as a workspace setting.
+1. Ouvrez le Chat, puis la palette de commandes avec `Ctrl+Shift+P`.
+2. Executez **Chat: Manage Language Models**.
+3. Selectionnez **Add Models**, puis **Custom Endpoint**.
+4. Donnez au groupe le nom `LiteLLM local` et au modele un nom explicite.
+5. Collez la cle individuelle quand VS Code la demande, jamais la master key.
+6. Choisissez **Chat Completions**, pas Responses ou Messages.
+7. Dans le `chatLanguageModels.json` ouvert par VS Code, configurez le modele
+   en suivant [le fichier de reference](vscode/chatLanguageModels.json).
+   Conservez la reference `${input:...}` generee par VS Code pour votre cle,
+   ou utilisez `${input:litellmApiKey}` et renseignez la cle a la demande.
+8. Verifiez l'identifiant `qwen3:4b-8k` et l'URL complete
+   `http://127.0.0.1:4000/v1/chat/completions`, puis enregistrez.
+9. Revenez au Chat et selectionnez **Qwen 3 4B via LiteLLM** dans le selecteur
+   de modeles. Si necessaire, redemarrez VS Code.
+10. Dans un nouveau chat court, sans fichiers joints, envoyez le prompt suivant.
 
-VS Code BYOK covers Chat/model interactions; it does not replace Copilot-backed inline code completions, semantic search, or embedding-dependent features. Using a BYOK model in Copilot harness/Agents sessions may require enabling the experimental `chat.agentHost.byokModels.enabled` setting.
+```text
+/no_think Reply with exactly VSCODE_VIA_LITELLM_OK and nothing else.
+```
 
-## Stop the stack
+Resultat attendu : `VSCODE_VIA_LITELLM_OK` dans le Chat et une requete
+`POST /v1/chat/completions` reussie dans les logs LiteLLM.
+Ne presentez le parcours VS Code comme valide qu'apres avoir observe ces deux elements.
+
+Le fichier `vscode\chatLanguageModels.json` du depot est un exemple,
+pas un parametre de workspace automatiquement charge.
+Si vous utilisez une session avec le harness Copilot/Agent Host, la documentation
+VS Code indique que `chat.agentHost.byokModels.enabled` doit etre active ;
+cette integration est experimentale. Les politiques de votre organisation et la
+version de VS Code peuvent aussi conditionner l'acces aux modeles.
+
+Une fois la cle collee :
+
+```powershell
+Set-Clipboard -Value ''
+Remove-Variable vscodeKey
+```
+
+## 7. Montrer que les requetes passent par LiteLLM
+
+Ouvrez un deuxieme terminal a la racine du depot :
+
+```powershell
+docker compose logs --tail 30 -f litellm
+```
+
+Envoyez un prompt depuis Copilot CLI ou VS Code. Une requete reussie vers
+`/v1/chat/completions` doit apparaitre. `Ctrl+C` arrete le suivi des logs,
+pas les conteneurs. N'activez pas les logs debug pendant une presentation :
+ils peuvent contenir des prompts ou d'autres donnees sensibles.
+
+Cette observation confirme le passage par la passerelle. Elle ne constitue pas
+une demo Grafana, un audit complet ou une garantie d'isolation reseau de tous les
+composants du client. Les ports publies sont limites a la machine locale,
+mais Ollama est directement accessible aux autres processus locaux.
+
+## 8. Montrer la revocation d'une cle
+
+Faites cette manipulation dans un terminal d'administration non partage.
+Elle revoque la cle CLI de ce terminal, pas la cle VS Code creee separement.
+
+```powershell
+$masterKey = (Get-Content .env | Where-Object { $_ -match '^LITELLM_MASTER_KEY=' }) -replace '^LITELLM_MASTER_KEY=', ''
+try {
+    Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:4000/key/delete' `
+        -Headers @{ Authorization = "Bearer $masterKey" } `
+        -ContentType 'application/json' `
+        -Body (@{ keys = @($env:LITELLM_USER_KEY) } | ConvertTo-Json) | Out-Null
+} finally {
+    Remove-Variable masterKey
+}
+$response = Invoke-WebRequest -Uri 'http://127.0.0.1:4000/v1/models' `
+    -Headers @{ Authorization = "Bearer $env:LITELLM_USER_KEY" } -SkipHttpErrorCheck
+[int]$response.StatusCode
+```
+
+Resultat attendu : `401`. Si la cle est encore acceptee, attendez l'expiration
+du cache d'authentification du proxy avant de retester. Ne declarez pas la
+revocation valide tant que l'API accepte la cle.
+
+Recreez une cle pour poursuivre :
+
+```powershell
+$env:LITELLM_USER_KEY = .\scripts\new-user-key.ps1 -Alias demo-cli
+```
+
+## 9. Arreter et relancer sans perdre la demo
+
+En fin de presentation :
 
 ```powershell
 .\scripts\stop-demo.ps1
+Remove-Item Env:\LITELLM_USER_KEY -ErrorAction SilentlyContinue
 ```
 
-This stops containers but retains model weights, PostgreSQL data, and local credentials. To remove those local demo data volumes later, first stop the demo, then run:
+Les conteneurs s'arretent, les cles PostgreSQL et les poids Ollama restent dans
+les volumes. Pour relancer :
 
 ```powershell
-docker compose down --volumes
+.\scripts\start-demo.ps1
+$env:LITELLM_USER_KEY = .\scripts\new-user-key.ps1 -Alias demo-cli
+.\scripts\test-demo.ps1 -IncludeCopilot
 ```
 
-That command permanently deletes the demo's stored keys/database and downloaded Ollama models in its Docker volume.
+> [!CAUTION]
+> `docker compose down --volumes` supprime les donnees de cette demo :
+> les cles utilisateur et les modeles telecharges. Ce n'est pas une commande
+> d'arret normal. Ne supprimez pas les volumes avant une presentation.
 
-## Troubleshooting
+## Depannage
 
-- **Docker daemon unavailable:** start Docker Desktop, then retry `.\scripts\start-demo.ps1`.
-- **Model is not listed by LiteLLM:** inspect `docker compose logs litellm` and verify `docker compose exec ollama ollama list`.
-- **401 from LiteLLM:** use the per-user key printed by `new-user-key.ps1`; do not use an expired/revoked key or the master key in client configuration.
-- **VS Code model absent:** confirm the API type is Chat Completions, the URL ends in `/v1/chat/completions`, and restart VS Code.
-- **Agent option unavailable in VS Code:** confirm the model supports tool calling; BYOK in Copilot harness sessions is experimental and may be policy- or version-dependent.
-- **Slow response:** this demo runs a quantized 4B model on local CPU by default; inference can be much slower than a hosted model.
+| Symptome                | Action                                                                     |
+|-------------------------|----------------------------------------------------------------------------|
+| Docker indisponible     | Demarrer Docker Desktop en mode Linux et verifier `docker context show`     |
+| Port deja occupe        | Identifier le service qui utilise 4000 ou 11434, sans le tuer arbitrairement |
+| Echec du demarrage      | Lire `docker compose logs --tail 60 litellm postgres ollama`                 |
+| Modele absent           | Verifier `docker compose exec -T ollama ollama list`, puis relancer le script |
+| HTTP 401                | Recreer une cle apres une remise a zero des volumes ou une revocation        |
+| Reponse lente           | Laisser le premier chargement finir ; utiliser un prompt court sans fichiers |
+| Contexte trop grand     | Nouveau chat, sans fichiers ; desactiver les instructions et MCP pour le CLI |
+| Modele absent VS Code   | Verifier Custom Endpoint, l'URL, les politiques, puis redemarrer VS Code      |
+| Ancienne cle VS Code    | Mettre a jour la cle du provider apres la recreation de la base PostgreSQL    |
 
-## Security notes
-
-- All published demo values are local examples, not production credentials.
-- The services bind to `127.0.0.1`; do not change the binding or expose the fixed demo setup to a network.
-- `.env` contains the LiteLLM master key, salt, and database password and is ignored by Git.
-- Never commit generated individual keys or real provider credentials.
-- This sample is not hardened for production. Review authentication, TLS, secret management, database backups, access controls, and current LiteLLM deployment guidance before any shared or remote deployment.
+Les tags d'images sont mobiles (`latest` et `main-stable`) : une nouvelle machine
+peut recuperer une autre version. Refaites les tests apres une mise a jour.
+Cette stack locale n'est pas durcie pour la production : pas de TLS ni de SSO,
+et Ollama n'a pas d'authentification locale.
 
 ## References
 
-- [GitHub Copilot CLI: BYOK models](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/use-byok-models)
-- [VS Code: AI language models and BYOK](https://code.visualstudio.com/docs/agent-customization/language-models)
-- [LiteLLM: Docker quick start](https://docs.litellm.ai/docs/proxy/docker_quick_start)
-- [LiteLLM: virtual keys](https://docs.litellm.ai/docs/proxy/virtual_keys)
-- [Ollama: OpenAI compatibility](https://docs.ollama.com/api/openai-compatibility)
+- [Copilot CLI : ajouter un fournisseur BYOK](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/use-byok-models)
+- [VS Code : modeles BYOK et Custom Endpoint](https://code.visualstudio.com/docs/agent-customization/language-models)
+- [LiteLLM : demarrage Docker](https://docs.litellm.ai/docs/proxy/docker_quick_start)
+- [LiteLLM : cles virtuelles](https://docs.litellm.ai/docs/proxy/virtual_keys)
+- [Ollama : compatibilite OpenAI](https://docs.ollama.com/api/openai-compatibility)

@@ -10,7 +10,7 @@
         "name": "Qwen 3 4B via LiteLLM",
         "url": "http://127.0.0.1:4000/v1/chat/completions",
         "toolCalling": true,
-        "maxInputTokens": 8192,
+        "maxInputTokens": 7680,
         "maxOutputTokens": 512
       }
     ]
