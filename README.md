@@ -101,7 +101,7 @@ The VS Code path is separate from CLI environment-variable configuration. VS Cod
 3. In VS Code, open the Chat model picker and choose **Manage Language Models** (or run **Chat: Manage Language Models** from the Command Palette).
 4. Select **Add Models → Custom Endpoint**.
 5. Enter a group name such as `LiteLLM local`, paste the *individual virtual key* (not the master key), and choose **Chat Completions**.
-6. When VS Code opens `chatLanguageModels.json`, use the example in [`vscode/chatLanguageModels.json`](vscode/chatLanguageModels.json). If you are setting it up directly, keep the API key as an input variable; do not replace it with a committed plaintext key.
+6. When VS Code opens its `chatLanguageModels.json`, use [`vscode/chatLanguageModels.json`](vscode/chatLanguageModels.json) as a reference for the provider/model entry. Keep the API key as an input variable; do not paste a raw key into a repository file.
 7. Save the configuration, reopen the model picker, and select **Qwen 3 4B via LiteLLM**. Restart VS Code if the model does not appear.
 8. Send a short prompt. Confirm a request appears in LiteLLM's logs:
 
@@ -109,7 +109,7 @@ The VS Code path is separate from CLI environment-variable configuration. VS Cod
    docker compose logs -f litellm
    ```
 
-For the `chatLanguageModels.json` example, `${input:litellmApiKey}` allows VS Code to request/store the key through its input mechanism. The endpoint URL intentionally includes the complete `/v1/chat/completions` API path.
+The example's `${input:litellmApiKey}` placeholder makes VS Code request the key through its input mechanism. The endpoint URL intentionally includes the complete `/v1/chat/completions` API path. Add the provider through VS Code's **Custom Endpoint** flow before using the reference entry; the sample file under `vscode/` is not automatically loaded as a workspace setting.
 
 VS Code BYOK covers Chat/model interactions; it does not replace Copilot-backed inline code completions, semantic search, or embedding-dependent features. Using a BYOK model in Copilot harness/Agents sessions may require enabling the experimental `chat.agentHost.byokModels.enabled` setting.
 
