@@ -29,9 +29,71 @@ organisation de test. Une seconde variante illustre une GitHub App limitee
 a un depot, sans lui donner des droits administrateur d'entreprise.
 
 > [!NOTE]
-> Ce guide ne cree ni compte technique, ni GitHub App, ni PAT.
-> Les commandes sont a executer uniquement sur une organisation/entreprise
-> de test explicitement approuvee. Aucun appel admin client n'a ete execute.
+> Le script fourni ne cree ni compte technique, ni GitHub App, ni PAT.
+> Les commandes sont a executer uniquement sur une cible explicitement approuvee.
+> La lecture des droits du depot de cette demo a ete executee ; les appels
+> de sieges et d'audit entreprise restent a executer avec les autorisations requises.
+
+## Lancer la demo avec le script
+
+Depuis la racine du depot, avec PowerShell 7.4 et GitHub CLI :
+
+```powershell
+# Utilise le compte gh courant (ou GH_TOKEN), sans changer son authentification.
+gh auth status
+.\admin-api\test-access.ps1 -Operation RepositoryAccess -Target Ch0wseth/copilot-litellm-demo
+
+# Avec un compte autorise sur VOTRE organisation de test :
+$org = Read-Host 'Organisation de test approuvee'
+.\admin-api\test-access.ps1 -Operation OrganizationSeats -Target $org
+```
+
+`RepositoryAccess` affiche le nom du depot, sa visibilite et le droit admin
+si GitHub le fournit. Il ne prouve pas des droits owner d'organisation.
+`OrganizationSeats` affiche uniquement `total_seats`, sans affectations individuelles.
+Une erreur API interrompt le script au lieu de retourner zero.
+
+Pour utiliser un PAT du compte technique ou un jeton d'installation d'app deja
+genere, ajouter `-PromptToken`. Le jeton est saisi masque, utilise uniquement
+dans le processus puis l'ancien `GH_TOKEN` est restaure, meme en cas d'echec.
+Sur GHES, le script utilise et restaure `GH_ENTERPRISE_TOKEN` a la place :
+
+```powershell
+.\admin-api\test-access.ps1 -Operation OrganizationSeats -Target $org -PromptToken
+```
+
+Le type de jeton et les permissions doivent correspondre a l'endpoint ; le script
+ne genere pas une identite ni ne donne des droits a un compte. Ne pas saisir
+un JWT d'app comme jeton d'installation.
+
+Pour une entreprise autorisee :
+
+```powershell
+$enterprise = Read-Host 'Slug de l entreprise de test approuvee'
+.\admin-api\test-access.ps1 -Operation EnterpriseSeats -Target $enterprise -PromptToken
+.\admin-api\test-access.ps1 -Operation EnterpriseAudit -Target $enterprise -PromptToken
+```
+
+`EnterpriseAudit` demande au plus un evenement web et affiche seulement le
+nombre retourne, pas l'evenement. Ces appels ne modifient rien. Ils ne testent
+ni l'attribution de sieges ni toutes les pages d'un inventaire.
+
+Tous les appels supportent `-GitHubHostname`. La valeur doit etre le nom d'hote
+utilise par `gh` (par exemple `SUBDOMAIN.ghe.com` ou `ghes.example`),
+pas l'URL `api.SUBDOMAIN.ghe.com` ni une URL avec `https://`.
+Verifiez que l'operation existe sur ce produit ; les endpoints Copilot Cloud
+ne deviennent pas disponibles sur GHES par simple changement d'hote.
+Les scripts utilisent la version REST `2022-11-28`, compatible avec ces appels.
+
+Ne pas utiliser `GH_DEBUG=api` : le helper refuse le mode debug afin d'eviter
+de journaliser les donnees et secrets. Il ne change pas le compte actif,
+ne cree aucun fichier de credential et n'ecrit aucune reponse brute sur disque.
+
+Pour les tests hors ligne des commandes, sans appel GitHub :
+
+```powershell
+.\scripts\test-github-demos.ps1
+```
 
 ## 1. Preciser quelle API doit etre automatisee
 
@@ -132,7 +194,11 @@ try {
         --jq '{total_seats: .total_seats}'
     if ($LASTEXITCODE -ne 0) { throw 'Lecture des sieges Copilot refusee ou indisponible.' }
 } finally {
-    [Environment]::SetEnvironmentVariable('GH_TOKEN', $previousToken, 'Process')
+    if ($null -eq $previousToken) {
+        Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
+    } else {
+        $env:GH_TOKEN = $previousToken
+    }
 }
 ```
 
@@ -174,7 +240,11 @@ try {
         --jq '{total_repositories: .total_count}'
     if ($LASTEXITCODE -ne 0) { throw 'Lecture du perimetre installation impossible.' }
 } finally {
-    [Environment]::SetEnvironmentVariable('GH_TOKEN', $previousToken, 'Process')
+    if ($null -eq $previousToken) {
+        Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
+    } else {
+        $env:GH_TOKEN = $previousToken
+    }
 }
 ```
 

@@ -30,9 +30,120 @@ Cette demo ne depend ni de LiteLLM ni de Grafana ; aucun nouveau conteneur
 n'est necessaire si un recepteur HTTPS approuve existe deja.
 
 > [!NOTE]
-> Ce dossier contient le guide, pas un serveur de reception deploye.
+> Ce dossier fournit un recepteur local executable et les scripts de gestion.
 > Aucun webhook global, tunnel reseau ou abonnement a des evenements n'a ete cree.
-> Les etapes de demonstration ci-dessous restent a executer avec les acces requis.
+> Les tests locaux sont synthetiques ; une livraison depuis GitHub exige les
+> acces requis et une URL HTTPS approuvee.
+
+## Demarrer avec les scripts
+
+Depuis la racine du depot, avec PowerShell 7.4 et Python 3.11 ou plus recent :
+
+```powershell
+# Terminal 1 : genere le secret ignore puis garde le recepteur au premier plan.
+.\webhooks\start-receiver.ps1
+```
+
+Dans un deuxieme terminal, toujours depuis la racine :
+
+```powershell
+# Trois verifications sur le vrai recepteur HTTP local, sans appel a GitHub.
+.\webhooks\test-demo.ps1
+Start-Process 'http://127.0.0.1:8787'
+```
+
+Resultats attendus : evenement signe accepte en `202`, doublon reconnu en `200`
+sans nouvel enregistrement, corps altere refuse en `401` et non conserve.
+Le navigateur affiche les metadonnees des livraisons valides ; aucun payload
+complet ni secret n'est affiche. Un test local ne prouve pas la reception GitHub.
+Pour changer de port, utiliser le meme `-Port` dans les deux scripts.
+Arreter le recepteur avec **Ctrl+C** dans son terminal.
+
+Le recepteur ecoute uniquement sur `127.0.0.1`. Il conserve au plus 1000 livraisons
+en memoire, perdues au redemarrage ; le dedoublonnage est limite a cette fenetre.
+Il refuse les corps de plus de 1 Mio, contrairement au plafond GitHub qui peut
+etre superieur : ce serveur de demonstration n'est pas un collecteur de production.
+Il ne traite aucune action metier. Un reverse proxy approuve doit exposer
+uniquement `/webhook`, pas le dashboard ni `/deliveries`.
+
+### Creer et tester un vrai hook de depot ou d'organisation
+
+Faire fournir une URL HTTPS approuvee qui relaie **les octets bruts et les headers**
+vers `http://127.0.0.1:8787/webhook`. Ce depot n'ouvre aucun tunnel et ne deploie
+aucun hebergement automatiquement. Verifier l'authentification avec `gh auth status`
+avant de choisir une cible ; les scripts ne changent jamais de compte.
+Enlever `GH_DEBUG` si present pour ne pas journaliser les secrets.
+
+```powershell
+$repo = Read-Host 'Depot de test approuve (OWNER/REPO)'
+$receiverUrl = Read-Host 'URL HTTPS approuvee, chemin /webhook inclus'
+
+# Previsualiser sans appel API ni creation.
+.\webhooks\manage-hook.ps1 -Scope Repository -Target $repo -Action Create `
+    -PayloadUrl $receiverUrl -Events repository -WhatIf
+
+# Confirmation interactive ; le secret local est transmis via stdin, pas en argument.
+$hook = .\webhooks\manage-hook.ps1 -Scope Repository -Target $repo -Action Create `
+    -PayloadUrl $receiverUrl -Events repository
+$hook
+
+# Garder cet ID : ne jamais supprimer tous les hooks du depot.
+if (-not $hook.id) { throw 'Creation non effectuee : pas de hook a tester.' }
+.\webhooks\manage-hook.ps1 -Scope Repository -Target $repo -Action Ping -HookId $hook.id
+Start-Sleep -Seconds 3
+.\webhooks\manage-hook.ps1 -Scope Repository -Target $repo -Action Deliveries -HookId $hook.id
+```
+
+Verifier dans les livraisons GitHub une reponse `202`, puis le `ping` avec
+`signature_verified: true` dans le dashboard local. Une demande de ping acceptee
+par l'API ne signifie pas que sa livraison est reussie ; si elle est encore
+en cours, relancer seulement `Deliveries`. Les dix dernieres livraisons sont affichees.
+Pour une organisation, remplacer `Repository` par `Organization` et `$repo`
+par le slug de l'organisation ; le compte doit etre owner.
+`List` affiche les hooks existants, sans leurs URLs ni secrets :
+
+```powershell
+.\webhooks\manage-hook.ps1 -Scope Repository -Target $repo -Action List
+.\webhooks\manage-hook.ps1 -Scope Repository -Target $repo -Action Delete -HookId $hook.id -WhatIf
+# A la fin : supprimer uniquement le hook de cette demo, avec confirmation.
+.\webhooks\manage-hook.ps1 -Scope Repository -Target $repo -Action Delete -HookId $hook.id
+```
+
+### Hooks globaux
+
+Cloud ne fournit pas ici la meme API de creation que Server. Le script ouvre
+la page de configuration Cloud ; le proprietaire d'entreprise remplit le
+formulaire comme decrit plus bas. Le secret genere est dans `webhooks\.env` :
+le copier hors partage d'ecran et ne jamais le committer.
+
+```powershell
+$enterprise = Read-Host 'Slug de l entreprise de test'
+.\webhooks\manage-hook.ps1 -Scope CloudEnterprise -Target $enterprise -Action OpenSettings
+```
+
+Pour GHES, les commandes `List`, `Create`, `Ping` et `Delete` utilisent
+`/admin/hooks` sur l'hote explicite. Il faut un site admin et un PAT classic.
+La cible est l'instance GHES, pas seulement une organisation. Par exemple :
+
+```powershell
+$server = Read-Host 'Nom DNS du serveur GHES de test, sans https'
+.\webhooks\manage-hook.ps1 -Scope ServerEnterprise -GitHubHostname $server `
+    -Target $enterprise -Action List
+```
+
+Les actions qui modifient GitHub demandent confirmation et supportent `-WhatIf`.
+Ne pas ajouter `-Confirm:$false` en presentation sauf automatisation deja approuvee.
+Sur Server, consulter les livraisons via `-Action OpenSettings`.
+
+### Verifications locales reproductibles
+
+```powershell
+python -m unittest discover -s webhooks -p test_receiver.py -v
+.\scripts\test-github-demos.ps1
+```
+
+Le second script simule `gh` pour verifier les routes, erreurs, sorties filtrees
+et `-WhatIf` ; il ne prouve pas les permissions d'une entreprise reelle.
 
 ## 1. Choisir Cloud, Server et le bon perimetre
 
@@ -88,8 +199,14 @@ Le recepteur doit :
 - Journaliser uniquement les metadonnees utiles a la demo, pas les secrets
   ni l'ensemble des payloads de production
 
-Utiliser un secret aleatoire different pour chaque hook. Pour generer un secret
-ephemere dans PowerShell 7.4 et le copier sans l'afficher :
+Le recepteur des scripts et son hook de demo doivent partager le secret genere
+dans `webhooks\.env` : ne pas en generer un second pour ce meme recepteur.
+Ce recepteur de demonstration utilise un seul secret ; pour une nouvelle demo
+isolee, supprimer l'ancien hook puis regenerer le secret avant de redemarrer.
+
+Pour un autre recepteur configure manuellement, utiliser un secret aleatoire
+different pour chaque hook. Pour generer un secret ephemere dans PowerShell 7.4
+et le copier sans l'afficher :
 
 ```powershell
 $webhookSecret = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))

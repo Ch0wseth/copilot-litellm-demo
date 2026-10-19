@@ -9,10 +9,11 @@ description: "Deployer et tester Ollama, LiteLLM, les cles individuelles, Copilo
 |-------------------------------|-----------------------------------------------------------|-------------------------------------------------------|
 | LiteLLM et cles individuelles  | Etapes ci-dessous                                         | CLI valide ; parcours VS Code manuel                  |
 | OpenTelemetry et Grafana      | [Guide d'observabilite](observability/README.md)             | Stack deployee ; traces/metriques CLI validees         |
-| Webhooks globaux GitHub        | [Reponse et scenario webhook](webhooks/README.md)           | Documentation ; demo a executer sur environnement test |
-| Compte technique et API admin  | [Reponse et scenario API](admin-api/README.md)               | Documentation ; demo en lecture seule a executer       |
+| Webhooks globaux GitHub        | [Scripts et scenario webhook](webhooks/README.md)           | Recepteur local teste ; hook reel selon acces/HTTPS    |
+| Compte technique et API admin  | [Scripts et scenario API](admin-api/README.md)               | Lecture depot validee ; sieges/audit selon permissions |
 
-Les deux derniers guides ne creent aucun compte, webhook ou acces administrateur.
+Les scripts API sont en lecture seule. Les scripts de gestion des webhooks
+demandent une cible explicite et confirmation ; ils ne creent aucun acces admin.
 
 ## Ce que vous allez montrer
 
