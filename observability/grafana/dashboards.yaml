@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Copilot demo
+    orgId: 1
+    folder: Copilot
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /demo

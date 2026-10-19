@@ -5,6 +5,10 @@ description: "Deployer et tester Ollama, LiteLLM, les cles individuelles, Copilo
 
 ## Ce que vous allez montrer
 
+Pour la demo complementaire **OpenTelemetry + Grafana**, suivez le
+[guide d'observabilite pas a pas](observability/README.md). Elle ajoute un collector
+et un dashboard aux clients Copilot, sans remplacer la stack LiteLLM ci-dessous.
+
 Un modele open source Qwen 3 4B tourne sur votre machine avec Ollama.
 LiteLLM expose une API compatible OpenAI et fournit une cle virtuelle distincte
 pour chaque utilisateur. Copilot CLI et le Chat de VS Code appellent cette API.

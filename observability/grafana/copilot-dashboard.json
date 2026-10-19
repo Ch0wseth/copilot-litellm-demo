@@ -1,0 +1,89 @@
+{
+  "uid": "copilot-otel-demo",
+  "title": "Copilot - OpenTelemetry local",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "5s",
+  "time": { "from": "now-30m", "to": "now" },
+  "tags": ["copilot", "demo", "opentelemetry"],
+  "links": [
+    { "title": "Explore traces et metriques", "type": "link", "url": "/explore" }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Donnees reelles du client, pas un rapport d'usage entreprise",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 4 },
+      "options": {
+        "mode": "markdown",
+        "content": "Les panneaux affichent les dernieres series exportees par le CLI local. Les compteurs peuvent repartir de zero a chaque processus : ce ne sont ni des totaux de facturation ni une mesure de productivite.\n\n**Traces** : Explore > Tempo > TraceQL : `{ resource.service.name = \"copilot-cli-demo\" }`. Pour VS Code : `{ resource.service.name = \"copilot-chat\" }`. Ouvrir une trace puis les spans `invoke_agent`, `chat` et, si un outil a reellement ete utilise, `execute_tool`.\n\nCapture des contenus desactivee. Aucun span d'outil n'est attendu pour le prompt de verification sans outils."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "CLI - tokens entrants, derniere serie",
+      "gridPos": { "x": 0, "y": 4, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(last_over_time(gen_ai_client_inference_usage_input_tokens_total{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range]))",
+          "instant": true
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "CLI - tokens sortants, derniere serie",
+      "gridPos": { "x": 6, "y": 4, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(last_over_time(gen_ai_client_inference_usage_output_tokens_total{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range]))",
+          "instant": true
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "CLI - appels LLM, derniere serie",
+      "gridPos": { "x": 12, "y": 4, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(last_over_time(gen_ai_client_operation_duration_seconds_count{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range]))",
+          "instant": true
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "CLI - duree moyenne LLM, derniere serie",
+      "gridPos": { "x": 18, "y": 4, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(last_over_time(gen_ai_client_operation_duration_seconds_sum{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range])) / sum(last_over_time(gen_ai_client_operation_duration_seconds_count{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range]))",
+          "instant": true
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 2 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    }
+  ]
+}
