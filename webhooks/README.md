@@ -17,6 +17,12 @@ Sur GitHub Enterprise Cloud, la configuration documentee passe par
 
 ## Ce qu'il est pertinent de montrer
 
+La configuration VS Code est independante de ce recepteur :
+[cle saisie manuellement](../vscode/README.md) ou
+[extension et broker de cle dynamique](../vscode-dynamic-key-poc/README.md).
+L'installation de ce POC ne requiert ni webhook, ni tunnel HTTPS, ni
+secret HMAC. Inversement, une cle LiteLLM n'authentifie pas une livraison GitHub.
+
 | Scenario                        | Preuves a montrer                                      | Acces necessaire                         |
 |---------------------------------|--------------------------------------------------------|------------------------------------------|
 | Webhook de depot, prise en main  | Un `ping`, sa livraison et la reponse du recepteur        | Administration d'un depot de test         |

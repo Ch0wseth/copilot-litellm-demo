@@ -18,6 +18,13 @@ pour toutes les API. Certains endpoints restent documentes avec un PAT classic.
 
 ## Une demo est-elle utile
 
+Pour la configuration des modeles dans VS Code, consultez plutot le
+[parcours manuel](../vscode/README.md) ou le
+[POC de cle dynamique avec extension](../vscode-dynamic-key-poc/README.md).
+Leurs cles LiteLLM ne sont pas des jetons GitHub et ne donnent aucun droit
+sur les API d'administration de ce guide. Aucun de ces scripts admin
+n'est necessaire pour installer l'extension du POC.
+
 Oui : une demonstration en lecture seule peut montrer l'identite appelee,
 le resultat d'un `GET`, le perimetre du jeton et le refus d'un acces non accorde.
 Elle n'a pas besoin de Docker, de Copilot CLI ou de VS Code.

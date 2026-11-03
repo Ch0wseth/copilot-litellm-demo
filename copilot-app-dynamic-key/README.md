@@ -7,6 +7,13 @@ description: "Reproduire localement les tests d'une commande de recuperation de 
 
 ## Objectif et limites
 
+Pour VS Code, deux guides distincts sont disponibles :
+[saisie manuelle dans Custom Endpoint](../vscode/README.md) et
+[extension avec broker de cle dynamique](../vscode-dynamic-key-poc/README.md).
+Le second contient le code, le demarrage sur un autre poste et les etapes
+manuelles restantes dans le Chat. Les variables CLI/SDK de ce guide
+ne configurent ni l'un ni l'autre de ces fournisseurs VS Code.
+
 Reproduisez les essais d'une commande de recuperation de cle API avec
 Copilot CLI et le SDK livre avec la GitHub Copilot app. Le test utilise un
 serveur fictif local, une cle factice et une reponse predeterminee. Il ne

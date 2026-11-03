@@ -5,13 +5,28 @@ description: "Deployer et tester Ollama, LiteLLM, les cles individuelles, Copilo
 
 ## Guides disponibles
 
-| Sujet                         | Guide                                                     | Etat                                                  |
-|-------------------------------|-----------------------------------------------------------|-------------------------------------------------------|
-| LiteLLM et cles individuelles | Etapes ci-dessous                                         | CLI et Chat VS Code testes en local                   |
-| Cle dynamique CLI et SDK      | [Tests isoles](copilot-app-dynamic-key/README.md)          | Serveur fictif local ; interface app non testee      |
-| OpenTelemetry et Grafana      | [Guide d'observabilite](observability/README.md)             | Stack deployee ; traces/metriques CLI validees         |
-| Webhooks globaux GitHub        | [Scripts et scenario webhook](webhooks/README.md)           | Recepteur local teste ; hook reel selon acces/HTTPS    |
-| Compte technique et API admin  | [Scripts et scenario API](admin-api/README.md)               | Lecture depot validee ; sieges/audit selon permissions |
+| Sujet | Guide | Etat |
+|-------|-------|------|
+| LiteLLM et cles individuelles | Etapes ci-dessous | API et CLI testes en local |
+| VS Code avec cle saisie manuellement | [Installation et rotation manuelles](vscode/README.md) | Reponse observee dans le Chat en mode Ask |
+| VS Code avec cle dynamique | [Installation de l'extension et du broker](vscode-dynamic-key-poc/README.md) | API du fournisseur validee ; Chat standard a valider |
+| Cle dynamique CLI et SDK | [Tests isoles](copilot-app-dynamic-key/README.md) | Serveur fictif local ; interface app non testee |
+| OpenTelemetry et Grafana | [Guide d'observabilite](observability/README.md) | Stack deployee ; traces/metriques CLI validees |
+| Webhooks globaux GitHub | [Scripts et scenario webhook](webhooks/README.md) | Recepteur local teste ; hook reel selon acces/HTTPS |
+| Compte technique et API admin | [Scripts et scenario API](admin-api/README.md) | Lecture depot validee ; sieges/audit selon permissions |
+
+Pour installer la partie VS Code sur un autre poste, choisissez un seul parcours :
+
+- **Sans extension maison** : creez ou obtenez une cle individuelle, puis
+  saisissez-la dans **Custom Endpoint**. La rotation reste manuelle.
+- **Avec recuperation automatique** : chargez le code de
+  `vscode-dynamic-key-poc\extension` et demarrez le broker local. Aucune cle
+  LiteLLM n'est saisie dans VS Code ; le broker en fournit une au fournisseur.
+
+Le POC est une alternative au champ `"apiKey": "${get_api_key.py}"`, pas une
+prise en charge de cette syntaxe dans `chatLanguageModels.json`. Il ne faut
+pas confondre le test API du fournisseur et une conversation dans le Chat
+standard : cette derniere validation reste a effectuer pour le parcours dynamique.
 
 Les scripts API sont en lecture seule. Les scripts de gestion des webhooks
 demandent une cible explicite et confirmation ; ils ne creent aucun acces admin.
@@ -55,6 +70,10 @@ Utilisez un terminal PowerShell 7.4 ou plus recent, avec Docker Desktop demarre
 en mode conteneurs Linux. Copilot CLI est necessaire pour le test CLI, VS Code
 pour le parcours graphique. Prevoyez plusieurs Go de disque et de RAM disponibles.
 Les poids du modele seuls representent environ 2,5 Go.
+
+L'extension a cle dynamique exige aussi Node.js 22 ou plus recent. Sa verification
+reelle a ete faite avec VS Code 1.145.0 ; ses commandes de test ne necessitent ni
+Copilot CLI ni la GitHub Copilot app.
 
 Si le depot est deja clone, placez-vous a sa racine. Pour un premier clone
 du depot public, utilisez GitHub CLI (avec authentification si necessaire), puis
@@ -230,6 +249,13 @@ GitHub recommande au moins 128K de contexte pour les meilleurs resultats CLI.
 
 ## 6. Faire la demo dans VS Code
 
+### Parcours A : saisie manuelle de la cle
+
+Le [guide VS Code detaille](vscode/README.md) explique l'installation sur un
+nouveau poste, le stockage de la cle, son remplacement et les controles a faire
+dans le Chat. La procedure ci-dessous utilise cette methode manuelle, pas le POC
+de recuperation automatique.
+
 La configuration du CLI ne configure pas VS Code. Creez une deuxieme cle,
 dans le terminal PowerShell, puis copiez-la dans le presse-papiers sans l'afficher :
 
@@ -300,8 +326,10 @@ ne fournit pas de mecanisme pour executer `${get_api_key.py}` depuis `apiKey` ;
 obtenir une cle par requete dans le CLI, ne configure pas VS Code. Si
 l'approvisionnement automatique est obligatoire, une piste est de developper
 une extension fournisseur de modeles et un service d'emission de cles
-authentifie par utilisateur. Ne distribuez jamais la cle maitre LiteLLM dans
-l'extension ou le poste client.
+authentifie par utilisateur. Le [POC fourni dans ce depot](vscode-dynamic-key-poc/README.md)
+demontre la mecanique avec un broker monoposte. Ne distribuez jamais la cle
+maitre LiteLLM dans une extension ou sur les postes des utilisateurs d'une
+passerelle d'entreprise.
 
 References :
 
@@ -314,6 +342,26 @@ Une fois la cle collee :
 Set-Clipboard -Value ''
 Remove-Variable vscodeKey
 ```
+
+### Parcours B : extension VS Code et broker de cle dynamique
+
+Suivez le [guide complet du POC](vscode-dynamic-key-poc/README.md), dans un
+profil VS Code isole. Il fournit les commandes pour :
+
+1. Cloner le depot et creer votre propre `.env` local, sans copier celui d'un autre poste.
+2. Demarrer une stack Compose nommee, avec ses volumes de test.
+3. Lancer le broker puis charger l'extension depuis son code source.
+4. Executer **Check Connection** et **Run Test Prompt** dans VS Code.
+5. Tester ensuite le selecteur et un prompt dans le Chat standard.
+6. Arreter le broker, tenter la revocation et conserver ou nettoyer le profil de test.
+
+Le 3 novembre 2026, avec VS Code 1.145.0 et Node.js 22.23.4, la commande
+**Run Test Prompt** a recu `VSCODE_DYNAMIC_KEY_POC_OK` via
+`LanguageModelChat.sendRequest`, et LiteLLM a consigne HTTP `200`. La cle a
+ete fournie automatiquement par le broker ; la master key n'a pas ete envoyee
+a l'extension. Ce resultat ne valide pas le selecteur ni une reponse dans le
+Chat standard avec ce fournisseur. Il ne valide pas non plus une rotation
+apres une heure, une integration SSO ou un deploiement entreprise.
 
 ## 7. Montrer que les requetes passent par LiteLLM
 

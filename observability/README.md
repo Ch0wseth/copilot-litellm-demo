@@ -200,6 +200,14 @@ emettre ce span. Ne presentez pas un outil theorique comme un outil execute.
 
 ## 5. Configurer le Chat VS Code
 
+Choisissez d'abord votre parcours de modele :
+[Custom Endpoint avec cle manuelle](../vscode/README.md), ou
+[POC extension et cle dynamique](../vscode-dynamic-key-poc/README.md).
+Le POC a valide une reponse via l'API du fournisseur, pas encore via le
+Chat standard ni avec OpenTelemetry. Il n'emet pas lui-meme de spans OTel.
+N'interpretez donc pas une reponse de sa commande de test comme une trace
+`copilot-chat` ou comme une validation des panneaux Grafana.
+
 La configuration du CLI n'active pas l'export du Chat VS Code.
 Utilisez une version de l'extension Copilot Chat qui expose les parametres
 `github.copilot.chat.otel.*`.

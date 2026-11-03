@@ -1,0 +1,33 @@
+{
+  "name": "litellm-dynamic-key-poc",
+  "displayName": "LiteLLM Dynamic Key POC",
+  "description": "A local VS Code model provider that retrieves an individual LiteLLM key from a loopback broker.",
+  "version": "0.0.1",
+  "publisher": "local-poc",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguageModelChatProvider:litellm-dynamic-key-poc"
+  ],
+  "contributes": {
+    "languageModelChatProviders": [
+      {
+        "vendor": "litellm-dynamic-key-poc",
+        "displayName": "LiteLLM Dynamic Key POC",
+        "managementCommand": "litellmDynamicKeyPoc.checkConnection"
+      }
+    ],
+    "commands": [
+      {
+        "command": "litellmDynamicKeyPoc.checkConnection",
+        "title": "LiteLLM Dynamic Key POC: Check Connection"
+      },
+      {
+        "command": "litellmDynamicKeyPoc.testChat",
+        "title": "LiteLLM Dynamic Key POC: Run Test Prompt"
+      }
+    ]
+  }
+}
