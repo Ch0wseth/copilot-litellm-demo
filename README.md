@@ -7,7 +7,7 @@ description: "Deployer et tester Ollama, LiteLLM, les cles individuelles, Copilo
 
 | Sujet                         | Guide                                                     | Etat                                                  |
 |-------------------------------|-----------------------------------------------------------|-------------------------------------------------------|
-| LiteLLM et cles individuelles  | Etapes ci-dessous                                         | CLI valide ; parcours VS Code manuel                  |
+| LiteLLM et cles individuelles | Etapes ci-dessous                                         | CLI et Chat VS Code testes en local                   |
 | OpenTelemetry et Grafana      | [Guide d'observabilite](observability/README.md)             | Stack deployee ; traces/metriques CLI validees         |
 | Webhooks globaux GitHub        | [Scripts et scenario webhook](webhooks/README.md)           | Recepteur local teste ; hook reel selon acces/HTTPS    |
 | Compte technique et API admin  | [Scripts et scenario API](admin-api/README.md)               | Lecture depot validee ; sieges/audit selon permissions |
@@ -45,7 +45,8 @@ d'administration GitHub. Grafana est fourni par la stack separee `observability`
 > [!IMPORTANT]
 > La configuration VS Code concerne le Chat BYOK. Elle ne remplace pas les
 > suggestions de code inline de Copilot, la recherche semantique ou les embeddings.
-> Le parcours VS Code reste a valider manuellement dans votre interface.
+> Le parcours a ete teste avec VS Code 1.144.1 en mode Ask et une stack LiteLLM
+> isolee ; validez-le aussi dans votre propre interface.
 
 ## 1. Verifier les prerequis
 
@@ -55,7 +56,8 @@ pour le parcours graphique. Prevoyez plusieurs Go de disque et de RAM disponible
 Les poids du modele seuls representent environ 2,5 Go.
 
 Si le depot est deja clone, placez-vous a sa racine. Pour un premier clone
-du depot prive, authentifiez GitHub CLI avec votre compte autorise, puis lancez :
+du depot public, utilisez GitHub CLI (avec authentification si necessaire), puis
+lancez :
 
 ```powershell
 gh repo clone Ch0wseth/copilot-litellm-demo
@@ -115,6 +117,11 @@ Les API sont accessibles sur <http://127.0.0.1:4000> pour LiteLLM et
 > Ne l'affichez pas pendant un partage d'ecran. Ne le commitez pas.
 > Les anciennes cles utilisateur ne fonctionnent plus apres suppression du
 > volume PostgreSQL : recreez-les a l'etape suivante.
+
+Si `.env` a ete perdu alors que le volume PostgreSQL existe encore, un nouveau
+`.env` ne change pas les identifiants deja enregistres dans la base. Restaurez
+le fichier d'origine depuis une sauvegarde securisee ; ne supprimez pas le
+volume sans sauvegarde et sans avoir accepte la perte des cles.
 
 ## 3. Creer une cle individuelle sans l'afficher
 
@@ -236,18 +243,19 @@ Dans VS Code :
 1. Ouvrez le Chat, puis la palette de commandes avec `Ctrl+Shift+P`.
 2. Executez **Chat: Manage Language Models**.
 3. Selectionnez **Add Models**, puis **Custom Endpoint**.
-4. Donnez au groupe le nom `LiteLLM local` et au modele un nom explicite.
+4. Donnez au groupe le nom `LiteLLM local`.
 5. Collez la cle individuelle quand VS Code la demande, jamais la master key.
 6. Choisissez **Chat Completions**, pas Responses ou Messages.
 7. Dans le `chatLanguageModels.json` ouvert par VS Code, configurez le modele
    en suivant [le fichier de reference](vscode/chatLanguageModels.json).
-   Conservez la reference `${input:...}` generee par VS Code pour votre cle,
-   ou utilisez `${input:litellmApiKey}` et renseignez la cle a la demande.
+   Conservez exactement la reference `apiKey` `${input:...}` generee par
+   VS Code : celle du fichier d'exemple est un placeholder a remplacer.
 8. Verifiez l'identifiant `qwen3:4b-8k` et l'URL complete
    `http://127.0.0.1:4000/v1/chat/completions`, puis enregistrez.
 9. Revenez au Chat et selectionnez **Qwen 3 4B via LiteLLM** dans le selecteur
    de modeles. Si necessaire, redemarrez VS Code.
-10. Dans un nouveau chat court, sans fichiers joints, envoyez le prompt suivant.
+10. Choisissez le mode **Ask** puis, dans un nouveau chat court sans fichiers
+    joints, envoyez le prompt suivant.
 
 ```text
 /no_think Reply with exactly VSCODE_VIA_LITELLM_OK and nothing else.
@@ -257,12 +265,47 @@ Resultat attendu : `VSCODE_VIA_LITELLM_OK` dans le Chat et une requete
 `POST /v1/chat/completions` reussie dans les logs LiteLLM.
 Ne presentez le parcours VS Code comme valide qu'apres avoir observe ces deux elements.
 
+> [!NOTE]
+> Selon la version d'Ollama et le template du modele, `/no_think` peut etre
+> ignore sur l'API compatible OpenAI. Qwen peut alors passer longtemps en
+> reflexion ou epuiser les 512 tokens de sortie avant sa reponse finale.
+> La reponse a pris environ 4 min 23 s sur le poste de test CPU. Une requete
+> HTTP 200 seule ne garantit pas que le Chat a recu cette reponse.
+
 Le fichier `vscode\chatLanguageModels.json` du depot est un exemple,
 pas un parametre de workspace automatiquement charge.
 Si vous utilisez une session avec le harness Copilot/Agent Host, la documentation
 VS Code indique que `chat.agentHost.byokModels.enabled` doit etre active ;
 cette integration est experimentale. Les politiques de votre organisation et la
 version de VS Code peuvent aussi conditionner l'acces aux modeles.
+
+### Recuperer la cle LiteLLM dans VS Code
+
+Lorsque vous collez la cle individuelle dans l'assistant **Custom Endpoint**,
+VS Code la conserve dans son stockage de secrets et inscrit dans le JSON une
+reference du type `${input:chat.lm.secret.<identifiant>}`. Gardez exactement
+la reference generee pour votre profil : une reference inventee ne designe pas
+la cle que vous venez de saisir. N'inscrivez ni la cle utilisateur ni la cle
+maitre LiteLLM en clair dans le fichier.
+
+Pour remplacer une cle, ouvrez **Chat: Manage Language Models**, puis utilisez
+la roue dentee du fournisseur pour reconfigurer sa cle. Conservez ensuite la
+reference mise a jour par VS Code.
+
+Cette methode evite une cle en clair dans le depot, mais ne va pas chercher ou
+renouveler la cle automatiquement. La configuration Custom Endpoint documentee
+ne fournit pas de mecanisme pour executer `${get_api_key.py}` depuis `apiKey` ;
+`COPILOT_PROVIDER_API_KEY_COMMAND`, documente par `copilot help providers` pour
+obtenir une cle par requete dans le CLI, ne configure pas VS Code. Si
+l'approvisionnement automatique est obligatoire, une piste est de developper
+une extension fournisseur de modeles et un service d'emission de cles
+authentifie par utilisateur. Ne distribuez jamais la cle maitre LiteLLM dans
+l'extension ou le poste client.
+
+References :
+
+- [BYOK et modeles Custom Endpoint dans VS Code](https://code.visualstudio.com/docs/agent-customization/language-models#_add-a-custom-endpoint-model)
+- [API VS Code pour les fournisseurs de modeles de chat](https://code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider)
 
 Une fois la cle collee :
 

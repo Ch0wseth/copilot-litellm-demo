@@ -210,7 +210,8 @@ Utilisez une version de l'extension Copilot Chat qui expose les parametres
    dans vos reglages utilisateur existants, sans ecraser les autres.
 4. Rechargez la fenetre avec **Developer: Reload Window**.
 5. Dans le Chat, choisissez le modele LiteLLM configure selon l'etape 6
-   du [README principal](../README.md). Ce choix est distinct de la configuration OTel.
+   du [README principal](../README.md), en conservant la reference de cle
+   generee par VS Code. Ce choix est distinct de la configuration OTel.
 6. Ouvrez un nouveau chat sans fichiers sensibles et envoyez :
 
 ```text
@@ -243,7 +244,9 @@ variables OTel, quittez et relancez-le depuis un terminal propre.
 > Ce parcours vise l'instrumentation de l'extension Copilot Chat. Les sessions
 > background CLI, Agent Host ou cloud peuvent utiliser un autre moteur et
 > necessiter leur propre configuration. Les suggestions inline ne sont pas
-> automatiquement des traces d'orchestration Chat.
+> automatiquement des traces d'orchestration Chat. Le test BYOK du README
+> principal ne valide pas a lui seul l'export OTel ; Qwen peut aussi prendre
+> plusieurs minutes sur CPU meme avec `/no_think`.
 
 Ne declarez le parcours graphique valide qu'apres avoir constate la reponse
 et une nouvelle trace `copilot-chat` dans Tempo.

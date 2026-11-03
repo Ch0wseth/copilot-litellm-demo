@@ -2,7 +2,7 @@
   {
     "name": "LiteLLM local",
     "vendor": "customendpoint",
-    "apiKey": "${input:litellmApiKey}",
+    "apiKey": "${input:REMPLACER_PAR_LA_REFERENCE_GENEREE_PAR_VS_CODE}",
     "apiType": "chat-completions",
     "models": [
       {
