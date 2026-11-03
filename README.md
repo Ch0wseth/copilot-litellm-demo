@@ -8,6 +8,7 @@ description: "Deployer et tester Ollama, LiteLLM, les cles individuelles, Copilo
 | Sujet                         | Guide                                                     | Etat                                                  |
 |-------------------------------|-----------------------------------------------------------|-------------------------------------------------------|
 | LiteLLM et cles individuelles | Etapes ci-dessous                                         | CLI et Chat VS Code testes en local                   |
+| Cle dynamique CLI et SDK      | [Tests isoles](copilot-app-dynamic-key/README.md)          | Serveur fictif local ; interface app non testee      |
 | OpenTelemetry et Grafana      | [Guide d'observabilite](observability/README.md)             | Stack deployee ; traces/metriques CLI validees         |
 | Webhooks globaux GitHub        | [Scripts et scenario webhook](webhooks/README.md)           | Recepteur local teste ; hook reel selon acces/HTTPS    |
 | Compte technique et API admin  | [Scripts et scenario API](admin-api/README.md)               | Lecture depot validee ; sieges/audit selon permissions |
