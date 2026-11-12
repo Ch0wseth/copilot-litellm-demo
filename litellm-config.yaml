@@ -1,9 +1,9 @@
 model_list:
   - model_name: qwen3:4b-8k
     litellm_params:
-      model: openai/qwen3:4b-8k
-      api_base: http://ollama:11434/v1
-      api_key: ollama
+      model: ollama_chat/qwen3:4b-8k
+      api_base: http://ollama:11434
+      reasoning_effort: low
 
 litellm_settings:
   drop_params: true

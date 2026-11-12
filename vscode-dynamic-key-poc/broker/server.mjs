@@ -41,6 +41,8 @@ export function createBrokerServer({
   let refreshAt = 0;
   let issuingKey;
   let closeBroker;
+  let closing = false;
+  let closePromise;
 
   async function revokeKey(key) {
     try {
@@ -50,7 +52,8 @@ export function createBrokerServer({
           authorization: `Bearer ${masterKey}`,
           'content-type': 'application/json'
         },
-        body: JSON.stringify({ keys: [key] })
+        body: JSON.stringify({ keys: [key] }),
+        signal: AbortSignal.timeout(30000)
       });
       if (!response.ok) {
         console.error(`LiteLLM key revocation failed with HTTP ${response.status}.`);
@@ -75,7 +78,8 @@ export function createBrokerServer({
           models: [model],
           key_alias: `vscode-poc-${randomUUID()}`,
           duration: '1h'
-        })
+        }),
+        signal: AbortSignal.timeout(30000)
       });
 
       if (!response.ok) {
@@ -122,10 +126,18 @@ export function createBrokerServer({
       sendJson(response, 401, { error: 'Unauthorized' });
       return;
     }
+    if (closing) {
+      sendJson(response, 503, { error: 'The key broker is stopping.' });
+      return;
+    }
 
     if (shutdownRequest) {
       sendJson(response, 202, { status: 'stopping' });
-      setImmediate(() => { void closeBroker(); });
+      setImmediate(() => {
+        void closeBroker().catch(error => {
+          console.error(`Key broker shutdown failed: ${error.message}`);
+        });
+      });
       return;
     }
 
@@ -141,17 +153,29 @@ export function createBrokerServer({
     }
   });
 
-  closeBroker = async () => {
-    if (cachedKey) {
-      await revokeKey(cachedKey);
-      cachedKey = undefined;
-    }
-
-    if (server.listening) {
-      await new Promise((resolve, reject) => {
+  closeBroker = () => {
+    if (closePromise) return closePromise;
+    closing = true;
+    const closed = server.listening
+      ? new Promise((resolve, reject) => {
         server.close(error => error ? reject(error) : resolve());
-      });
-    }
+      })
+      : Promise.resolve();
+    closePromise = (async () => {
+      try {
+        if (issuingKey) await issuingKey;
+      } finally {
+        try {
+          if (cachedKey) {
+            await revokeKey(cachedKey);
+            cachedKey = undefined;
+          }
+        } finally {
+          await closed;
+        }
+      }
+    })();
+    return closePromise;
   };
 
   return {
@@ -205,6 +229,7 @@ async function start() {
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   await new Promise(resolve => broker.server.once('close', resolve));
+  await broker.close();
   if (stopping) await stopping;
   else await rm(tokenFile, { force: true });
 }

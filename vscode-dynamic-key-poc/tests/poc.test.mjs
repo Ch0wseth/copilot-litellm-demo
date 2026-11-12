@@ -188,6 +188,14 @@ test('the VS Code provider obtains a scoped key dynamically through the local br
 
     await provider.testChat();
     assert.equal(chatRequests.length, 2);
+    const sendRequest = apiModel.sendRequest;
+    apiModel.sendRequest = async () => ({
+      stream: (async function* () {
+        yield new MockTextPart('Reasoning about VSCODE_DYNAMIC_KEY_POC_OK is not the expected answer.');
+      })()
+    });
+    await assert.rejects(provider.testChat(), /expected test marker/);
+    apiModel.sendRequest = sendRequest;
 
     const unauthorized = await fetch(`http://127.0.0.1:${broker.server.address().port}/v1/key`, {
       method: 'POST'
@@ -200,4 +208,148 @@ test('the VS Code provider obtains a scoped key dynamically through the local br
   }
 
   assert.deepEqual(revokedKeys, ['sk-test-key']);
+});
+
+async function startTestBroker(t, fetchImpl) {
+  const broker = createBrokerServer({
+    baseUrl: 'http://127.0.0.1:4000',
+    masterKey: 'master-test-only',
+    brokerToken: 'broker-test-only',
+    fetchImpl
+  });
+  await new Promise(resolve => broker.server.listen(0, '127.0.0.1', resolve));
+  t.after(() => broker.close());
+  return {
+    ...broker,
+    requestKey: () => fetch(`http://127.0.0.1:${broker.server.address().port}/v1/key`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer broker-test-only' }
+    })
+  };
+}
+
+test('concurrent broker requests share one key and refresh it before expiry', async t => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const generated = [];
+  const revoked = [];
+  const broker = await startTestBroker(t, async (url, options) => {
+    if (url.pathname === '/key/generate') {
+      const key = `sk-rotation-test-${generated.length + 1}`;
+      generated.push(key);
+      return Response.json({ key });
+    }
+    assert.equal(url.pathname, '/key/delete');
+    revoked.push(...JSON.parse(options.body).keys);
+    return Response.json({});
+  });
+
+  const firstBatch = await Promise.all(
+    Array.from({ length: 8 }, async () => (await broker.requestKey()).json())
+  );
+  assert.equal(generated.length, 1);
+  assert.ok(firstBatch.every(result => result.apiKey === generated[0]));
+
+  now += 55 * 60 * 1000;
+  const refreshed = await (await broker.requestKey()).json();
+  assert.equal(generated.length, 2);
+  assert.equal(refreshed.apiKey, generated[1]);
+  assert.deepEqual(revoked, [generated[0]]);
+  await broker.close();
+  assert.deepEqual(revoked, generated);
+});
+
+test('shutdown waits for a key being issued and revokes it', async t => {
+  const started = Promise.withResolvers();
+  const release = Promise.withResolvers();
+  const revoked = [];
+  const broker = await startTestBroker(t, async (url, options) => {
+    if (url.pathname === '/key/generate') {
+      started.resolve();
+      await release.promise;
+      return Response.json({ key: 'sk-shutdown-test' });
+    }
+    assert.equal(url.pathname, '/key/delete');
+    revoked.push(...JSON.parse(options.body).keys);
+    return Response.json({});
+  });
+
+  const request = broker.requestKey();
+  await started.promise;
+  const closing = broker.close();
+  release.resolve();
+  await request;
+  await closing;
+  assert.deepEqual([...revoked], ['sk-shutdown-test']);
+});
+
+async function createTestProvider(t, fetchImpl) {
+  const directory = await mkdtemp(join(tmpdir(), 'litellm-provider-test-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const tokenFile = join(directory, 'broker-token');
+  await writeFile(tokenFile, 'broker-test-only', 'utf8');
+  class TextPart {
+    constructor(value) { this.value = value; }
+  }
+  const vscode = {
+    LanguageModelTextPart: TextPart,
+    LanguageModelChatMessageRole: { User: 1, Assistant: 2, System: 3 }
+  };
+  return {
+    provider: new LiteLlmProvider(vscode, {
+      brokerUrl: 'http://127.0.0.1:43128',
+      baseUrl: 'http://127.0.0.1:4000/v1',
+      tokenFile,
+      modelId: 'qwen3:4b-8k',
+      fetchImpl
+    }),
+    model: { id: 'qwen3:4b-8k' },
+    messages: [{ role: 1, content: [new TextPart('Test prompt.')] }]
+  };
+}
+
+test('an already cancelled chat does not request a key or call the model', async t => {
+  const { provider, model, messages } = await createTestProvider(t, async () => {
+    assert.fail('A cancelled chat must not make an HTTP request.');
+  });
+  await assert.rejects(provider.provideLanguageModelChatResponse(
+    model, messages, {}, { report() {} },
+    { isCancellationRequested: true, onCancellationRequested() { return { dispose() {} }; } }
+  ), { name: 'AbortError' });
+});
+
+test('cancelling while obtaining a key aborts the broker request', { timeout: 5000 }, async t => {
+  const started = Promise.withResolvers();
+  let cancel;
+  const { provider, model, messages } = await createTestProvider(t, async (_url, options) => {
+    started.resolve();
+    assert.ok(options.signal, 'Key retrieval must receive the chat cancellation signal.');
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+    });
+  });
+  const request = provider.provideLanguageModelChatResponse(
+    model, messages, {}, { report() {} },
+    { onCancellationRequested(listener) { cancel = listener; return { dispose() {} }; } }
+  );
+  const rejected = assert.rejects(request, { name: 'AbortError' });
+  await started.promise;
+  cancel();
+  await rejected;
+});
+
+test('a truncated or empty completion is an explicit error, not a successful chat', async t => {
+  for (const completion of [
+    { finish_reason: 'length', message: { content: 'Incomplete response' } },
+    { finish_reason: 'stop', message: { content: '' } }
+  ]) {
+    const { provider, model, messages } = await createTestProvider(t, async url => {
+      if (url.pathname === '/v1/key') return Response.json({ apiKey: 'sk-provider-test' });
+      return Response.json({ choices: [completion] });
+    });
+    await assert.rejects(provider.provideLanguageModelChatResponse(
+      model, messages, {}, { report() { assert.fail('Incomplete content must not be reported.'); } },
+      { onCancellationRequested() { return { dispose() {} }; } }
+    ), /output budget|no text response/);
+  }
 });

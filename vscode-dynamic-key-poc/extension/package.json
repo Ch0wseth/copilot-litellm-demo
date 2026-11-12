@@ -5,7 +5,7 @@
   "version": "0.0.1",
   "publisher": "local-poc",
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.145.0"
   },
   "main": "./extension.js",
   "activationEvents": [

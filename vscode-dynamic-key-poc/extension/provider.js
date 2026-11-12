@@ -35,11 +35,13 @@ class LiteLlmProvider {
     }];
   }
 
-  async getIndividualKey() {
+  async getIndividualKey(signal) {
+    signal?.throwIfAborted();
     let brokerToken;
     try {
-      brokerToken = (await fs.readFile(this.tokenFile, 'utf8')).trim();
+      brokerToken = (await fs.readFile(this.tokenFile, { encoding: 'utf8', signal })).trim();
     } catch {
+      signal?.throwIfAborted();
       throw new Error('Start the local key broker with vscode-dynamic-key-poc\\scripts\\start-broker.ps1.');
     }
     if (!brokerToken) {
@@ -50,9 +52,11 @@ class LiteLlmProvider {
     try {
       response = await this.fetchImpl(new URL('/v1/key', this.brokerUrl), {
         method: 'POST',
-        headers: { authorization: `Bearer ${brokerToken}` }
+        headers: { authorization: `Bearer ${brokerToken}` },
+        signal
       });
     } catch {
+      signal?.throwIfAborted();
       throw new Error('The local key broker is unavailable. Start it before using this model.');
     }
     if (!response.ok) {
@@ -105,7 +109,7 @@ class LiteLlmProvider {
       for await (const part of response.stream) {
         if (part instanceof this.vscode.LanguageModelTextPart) text += part.value;
       }
-      if (!text.includes('VSCODE_DYNAMIC_KEY_POC_OK')) {
+      if (text.trim() !== 'VSCODE_DYNAMIC_KEY_POC_OK') {
         throw new Error('The local model did not return the expected test marker.');
       }
     } finally {
@@ -118,10 +122,12 @@ class LiteLlmProvider {
       throw new Error('The selected model is not provided by this extension.');
     }
 
-    const apiKey = await this.getIndividualKey();
     const controller = new AbortController();
     const cancellation = token.onCancellationRequested(() => controller.abort());
+    if (token.isCancellationRequested) controller.abort();
     try {
+      const apiKey = await this.getIndividualKey(controller.signal);
+      controller.signal.throwIfAborted();
       const response = await this.fetchImpl(new URL('chat/completions', this.baseUrl), {
         method: 'POST',
         headers: {
@@ -147,8 +153,11 @@ class LiteLlmProvider {
       }
 
       const payload = await response.json();
+      if (payload.choices?.[0]?.finish_reason === 'length') {
+        throw new Error('The local model exhausted its output budget. Use a shorter prompt or increase the output budget.');
+      }
       const text = payload.choices?.[0]?.message?.content;
-      if (typeof text !== 'string') {
+      if (typeof text !== 'string' || !text.trim()) {
         throw new Error('LiteLLM returned no text response.');
       }
       progress.report(new this.vscode.LanguageModelTextPart(text));

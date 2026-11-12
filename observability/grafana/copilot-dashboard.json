@@ -2,7 +2,7 @@
   "uid": "copilot-otel-demo",
   "title": "Copilot - OpenTelemetry local",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": false,
   "refresh": "5s",
   "time": { "from": "now-30m", "to": "now" },
@@ -62,7 +62,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(last_over_time(gen_ai_client_operation_duration_seconds_count{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range]))",
+          "expr": "sum(last_over_time(gen_ai_client_inference_duration_seconds_count{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range]) or last_over_time(gen_ai_client_operation_duration_seconds_count{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range]))",
           "instant": true
         }
       ],
@@ -78,7 +78,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(last_over_time(gen_ai_client_operation_duration_seconds_sum{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range])) / sum(last_over_time(gen_ai_client_operation_duration_seconds_count{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range]))",
+          "expr": "sum(last_over_time(gen_ai_client_inference_duration_seconds_sum{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range]) or last_over_time(gen_ai_client_operation_duration_seconds_sum{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range])) / sum(last_over_time(gen_ai_client_inference_duration_seconds_count{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range]) or last_over_time(gen_ai_client_operation_duration_seconds_count{service_name=\"copilot-cli-demo\",gen_ai_operation_name=\"chat\"}[$__range]))",
           "instant": true
         }
       ],

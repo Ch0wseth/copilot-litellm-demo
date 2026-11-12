@@ -45,23 +45,35 @@ Agent avec outils, des suggestions inline, des embeddings ou des images.
 
 ### Ce qui a ete verifie
 
-Le 3 novembre 2026, avec VS Code 1.145.0, Node.js 22.23.4 et la vraie stack
-LiteLLM/Ollama locale :
+Verification du 12 novembre 2026, avec VS Code 1.146.0, Node.js 22.23.4,
+Ollama 0.40.6 et la vraie stack LiteLLM/Ollama locale :
 
 | Verification | Resultat |
 |--------------|----------|
-| Tests Node avec serveurs et cles factices | 2 tests reussis |
+| Tests Node avec serveurs et cles factices | 7 tests reussis |
 | Decouverte du modele avec `vscode.lm.selectChatModels` | Reussie |
 | Obtention automatique d'une cle et authentification LiteLLM | Reussies |
-| Commande Run Test Prompt, via `LanguageModelChat.sendRequest` | Marqueur `VSCODE_DYNAMIC_KEY_POC_OK` recu |
-| Requete correspondante dans LiteLLM | HTTP `200` observe |
-| Selection puis prompt dans le Chat VS Code standard avec ce fournisseur | Pas encore valide |
-| Rotation apres une heure, revocation reelle a l'arret, SSO, deploiement multi-utilisateur | Pas valides par ce test |
+| Deux requetes via `LanguageModelChat.sendRequest` dans le vrai hote VS Code | Reponses exactement egales a `VSCODE_DYNAMIC_KEY_POC_OK` |
+| Absence de master key dans l'environnement du hote VS Code de test | Verifiee |
+| Revocation reelle a l'arret du broker | Cle acceptee avant l'arret puis refusee en HTTP `401` ; jeton local supprime |
+| Rotation apres 55 minutes et fermeture pendant une emission de cle | Testees avec horloge simulee et serveurs factices |
+| Selection puis prompt dans le Chat VS Code standard avec ce fournisseur | Valides en harness Local / Ask : reponse affichee exactement egale a `WORLDLINE_LOCAL_CHAT_OK` et nouvel appel LiteLLM HTTP `200` |
+| Harness Copilot avec BYOK experimental et ce modele 8K | Echec avant inference : messages systeme et definitions d'outils au-dela du budget de contexte |
+| Rotation reelle apres une heure, SSO, deploiement multi-utilisateur | Non valides |
 
-Le test API reussi prouve le chemin fournisseur -> broker -> LiteLLM -> modele.
-Il **ne prouve pas** a lui seul que le selecteur du Chat standard expose le
-modele ou qu'une conversation de cette interface aboutit. L'etape 7 est la
-validation finale de ce parcours utilisateur.
+Le test API et le test du Chat sont deux chemins distincts. Le parcours
+graphique a aussi ete execute : choix de Local, Ask, de l'onglet du
+fournisseur puis de Qwen, envoi du prompt et lecture de la reponse dans le
+Chat. Aucune cle LiteLLM n'a ete saisie dans VS Code ; le fichier
+`chatLanguageModels.json` du profil d'essai etait vide (`[]`). L'etape 7
+permet de reproduire ce parcours utilisateur.
+
+> [!IMPORTANT]
+> Ce resultat concerne le harness **Local**, pas le harness **Copilot**.
+> VS Code annonce le retrait de Local en **fevrier 2027**. Ce POC texte
+> n'est donc pas une solution perenne validee pour le nouveau harness :
+> prevoir sa migration et ses tests avec un modele et un contexte adaptes.
+> Voir les [harnesses VS Code](https://code.visualstudio.com/docs/agents/run/agent-harnesses).
 
 ## 2. Prerequis et limites de securite
 
@@ -253,7 +265,7 @@ Run Test Prompt utilise `vscode.lm.selectChatModels` puis
 /no_think Reply with exactly VSCODE_DYNAMIC_KEY_POC_OK and nothing else.
 ```
 
-Il confirme la presence du marqueur dans le texte recu, sans afficher de cle.
+Il exige que la reponse soit exactement le marqueur, sans afficher de cle.
 La notification de succes n'est pas une conversation dans le panneau Chat.
 Consultez le centre de notifications si une notification a disparu.
 
@@ -269,35 +281,72 @@ correspondre au test. Un ancien `200` ou un `/v1/models` reussi ne suffit pas.
 N'activez pas les logs debug et ne joignez pas de prompts confidentiels.
 `Ctrl+C` dans ce terminal arrete les logs, pas la stack.
 
-## 7. Validation manuelle finale dans le Chat VS Code
+## 7. Parcours valide dans le Chat VS Code : Local / Ask
 
-Cette etape est **a effectuer sur votre installation** : elle n'a pas encore
-ete validee avec ce fournisseur dans l'interface standard.
+Cette etape a ete executee dans l'interface de VS Code 1.146.0 avec le
+fournisseur de ce depot. Reproduisez-la sur votre installation : les
+harnesses, politiques et versions peuvent changer les choix disponibles.
 
-1. Dans la fenetre isolee, ouvrez le Chat standard de VS Code.
-2. Si le parcours affiche **Sign In**, **Models** ou un assistant
-   d'activation, examinez ses exigences et les politiques de votre compte.
-   Les exigences de connexion varient selon le harness ; ne supposez
-   pas qu'une cle LiteLLM les remplace.
-3. Ouvrez **Chat: Manage Language Models** si necessaire et recherchez
+1. Dans la fenetre isolee, ouvrez le Chat standard et choisissez **New Chat** (`+`).
+2. **Avant le premier prompt**, ouvrez le selecteur de harness/cible
+   (bouton **Copilot** en bas du Chat sur l'installation testee), puis
+   choisissez **Local**. Le nom Local designe ici le harness, pas simplement
+   l'emplacement de votre modele.
+3. Choisissez **Ask**, sans fichier ni image joints.
+4. Ouvrez **Chat: Manage Language Models** si necessaire et recherchez
    le fournisseur **LiteLLM Dynamic Key POC** deja contribue par l'extension.
    Sa commande de gestion est Check Connection ; elle ne demande pas de cle.
-4. Dans le selecteur du Chat, choisissez
-   **Qwen via LiteLLM (qwen3:4b-8k)**. Ne choisissez pas Auto ni le
+5. Dans le selecteur de modeles du Chat, ouvrez **l'onglet du fournisseur
+   LiteLLM Dynamic Key POC**, puis choisissez
+   **Qwen via LiteLLM (qwen3:4b-8k)**. Cet onglet peut etre une simple icone :
+   survolez-la pour identifier le fournisseur. La liste de l'onglet Copilot
+   ne contient pas Qwen. Ne choisissez pas Auto ni le
    **Qwen 3 4B via LiteLLM** d'un ancien Custom Endpoint manuel.
-5. Utilisez **Ask**, dans un nouveau chat sans fichier, image ni outil.
-6. Envoyez le meme prompt `VSCODE_DYNAMIC_KEY_POC_OK` que ci-dessus.
+6. Envoyez ce prompt dans la zone de saisie du Chat :
+
+   ```text
+   /no_think Reply with exactly WORLDLINE_LOCAL_CHAT_OK and nothing else.
+   ```
+
 7. Verifiez le texte affiche dans le Chat **et** une nouvelle requete
    `/v1/chat/completions` avec HTTP `200` dans les logs de cette stack.
 
+La reponse observee etait exactement `WORLDLINE_LOCAL_CHAT_OK`, apres
+environ 86 secondes sur le poste de test. Un second prompt dans la meme
+conversation a aussi retourne exactement `WORLDLINE_CHAT_FOLLOWUP_OK`.
+Les logs ont confirme deux appels Chat Completions HTTP `200` pour une
+seule generation de cle, reutilisee par le broker. Les demandes de
+demarrage de serveurs MCP n'etaient pas necessaires pour ce test texte ;
+aucun serveur supplementaire n'a ete authentifie pour le faire aboutir.
+
 Si le modele ne se trouve pas dans le selecteur, ne validez pas ce parcours
 en remplacant le test par Run Test Prompt : ce serait un autre chemin.
-Consultez les diagnostics de l'etape 10 et les politiques BYOK.
+Verifiez d'abord le harness, le mode Ask et l'onglet fournisseur. Consultez
+ensuite les diagnostics de l'etape 10 et les politiques BYOK. Si Local
+est interdit par une politique, ne la contournez pas.
+
+Le harness Copilot a aussi ete essaye avec le reglage experimental officiel
+`chat.agentHost.byokModels.enabled`. Le modele y etait selectionnable, mais
+l'envoi du prompt a echoue **avant l'appel au fournisseur** :
+`static system messages and tool definitions exceed this model's context budget`.
+Ses messages systeme et outils depassaient les 8K du modele dans cet
+environnement. Changer seulement Ask ou le modele ne change pas le harness.
+Ce resultat ne valide pas Copilot avec ce petit modele et ne signifie pas
+que BYOK exige toujours une connexion GitHub. Voir la
+[configuration BYOK officielle](https://code.visualstudio.com/docs/agent-customization/language-models#_bring-your-own-language-model-key).
 
 Un modele Qwen de 4B sur CPU peut mettre plusieurs minutes a repondre.
 `/no_think` peut etre ignore selon le template. Le fournisseur utilise
 `stream: false` : il transmet la reponse complete a VS Code une fois l'appel
 termine, pas token par token.
+
+La stack utilise le fournisseur natif `ollama_chat` de LiteLLM pour separer
+le raisonnement Qwen du texte final. `reasoning_effort: low` active cette
+separation ; il ne garantit pas que Qwen raisonne moins longtemps. Avec
+l'ancienne route OpenAI vers Ollama, les tests ont rencontre des reponses
+vides, tronquees ou contenant le raisonnement. `/no_think` seul ne garantit
+pas sa desactivation. Une reponse tronquee ou vide est maintenant une erreur
+explicite du fournisseur, pas une reponse de chat reussie.
 
 ## 8. Comprendre le code et ses points d'adaptation
 
@@ -308,7 +357,9 @@ termine, pas token par token.
 | `extension\provider.js` | Expose Qwen, lit le jeton du broker, obtient une cle et convertit les messages texte pour LiteLLM |
 | `broker\server.mjs` | Authentifie les appels locaux, genere/cache/revoque les cles virtuelles |
 | `scripts\start-broker.ps1` | Lit le `.env` local et prepare l'environnement du processus broker |
-| `tests\poc.test.mjs` | Teste l'enregistrement et le flux avec des serveurs/cles factices |
+| `scripts\test-provider.ps1` | Lance un broker et un profil VS Code isoles ; verifie les requetes reelles et la revocation |
+| `tests\vscode.test.cjs` | Execute les deux requetes dans l'API du vrai hote VS Code, sans utiliser le Chat standard |
+| `tests\poc.test.mjs` | Teste le flux, la rotation, l'annulation, la fermeture concurrente et les erreurs avec des serveurs factices |
 
 ### Flux d'une requete
 
@@ -327,7 +378,9 @@ rafraichissement cree une nouvelle cle et tente de revoquer la precedente.
 Le cache et la duree ne constituent pas une identite utilisateur : le
 `key_alias` aleatoire sert uniquement d'etiquette de demo.
 
-L'annulation de la requete VS Code est relayee au `fetch` de Chat Completions.
+L'annulation de la requete VS Code est relayee aux appels du broker et de
+Chat Completions, y compris si la requete est deja annulee au demarrage.
+La fermeture du broker attend une emission en cours avant de revoquer sa cle.
 Le comptage de tokens est une estimation de longueur de texte, pas le tokenizer
 Qwen : evitez les grands contextes. Le code ne gere ni outils ni images.
 
@@ -363,7 +416,9 @@ Ce depot ne fournit pas ce service, une integration Entra ID, un deploiement
 multi-utilisateur ni une politique centralisee VS Code. Ne distribuez pas
 le `.env` ou le broker administrateur local aux utilisateurs d'une entreprise.
 
-## 9. Tests automatises sans Docker ni VS Code
+## 9. Tests automatises
+
+### Tests sans Docker ni VS Code
 
 Depuis la racine du depot :
 
@@ -373,13 +428,42 @@ node --test .\vscode-dynamic-key-poc\tests\poc.test.mjs
 
 Les tests emploient des cles factices et des serveurs HTTP loopback temporaires.
 Ils verifient l'enregistrement du fournisseur, la restriction du modele et
-la duree demandee, le cache de cle sur plusieurs appels, le refus sans jeton,
-une reponse de chat et une requete de revocation lors de la fermeture du broker.
+la duree demandee, les appels concurrents, le cache et sa rotation avec une
+horloge simulee, le refus sans jeton, l'annulation avant/pendant la demande
+de cle, le refus des reponses vides/tronquees et la revocation d'une cle
+emise pendant la fermeture.
 
 Ces tests ne prouvent ni la connexion GitHub, ni le selecteur du Chat, ni
-l'invalidation reelle d'une cle dans LiteLLM, ni la rotation apres 55 minutes.
+l'invalidation reelle d'une cle dans LiteLLM, ni une rotation en temps reel.
 Ils suppriment leur repertoire temporaire a la fin. Aucun secret du `.env`
 n'est utilise.
+
+### Integration avec le vrai VS Code et la vraie stack
+
+Demarrez seulement la stack de l'etape 3. **Ne demarrez pas le broker de
+l'etape 4** pour ce test : le script en lance un sur 43128 et refuse de
+remplacer un broker existant.
+
+```powershell
+.\vscode-dynamic-key-poc\scripts\test-provider.ps1
+```
+
+Il cree un profil VS Code et un jeton temporaires distincts du profil
+principal, sans transmettre la master key au processus VS Code. Il verifie
+le refus sans jeton, deux reponses exactes dans l'API du fournisseur, puis
+la revocation effective de la cle (HTTP `200` avant l'arret, `401` apres)
+et la suppression du jeton. Il restaure les variables d'environnement et
+ne stoppe que ses propres processus.
+
+Une fenetre VS Code de test peut apparaitre puis se fermer. Aucune connexion
+GitHub n'a ete necessaire pour ces appels API lors de la verification.
+En cas d'echec, le chemin des diagnostics temporaires est affiche ; ne
+partagez ni les fichiers de jetons ni les logs bruts. Si VS Code est en
+cours de mise a jour, attendez sa fin avant de relancer.
+
+Ce test **ne remplace pas l'etape 7** : il n'ouvre pas le selecteur, ne
+soumet pas de prompt dans le Chat standard et ne prouve pas qu'une politique
+d'entreprise autorise ce parcours.
 
 ## 10. Depannage
 
@@ -394,7 +478,7 @@ n'est utilise.
 | Commande LiteLLM absente | Verifier le titre Extension Development Host, le chemin absolu de l'extension et sa version de VS Code |
 | `registerLanguageModelChatProvider` indisponible | Mettre a jour VS Code vers une version avec cette API ; ne pas ajouter une cle manuelle pour masquer le probleme |
 | Pas de workbench ou mauvais profil | Sauvegarder, fermer les fenetres puis relancer ; ne pas modifier le profil principal par erreur |
-| Modele absent du Chat mais Check Connection reussi | Tester le Chat/harness local, la confiance, la configuration de compte et les politiques BYOK ; resultat API != resultat du selecteur |
+| Modele absent du Chat mais Check Connection reussi | Verifier Local / Ask et l'onglet fournisseur LiteLLM Dynamic Key POC, parfois represente par une icone seule ; puis la confiance et les politiques BYOK |
 | Pas de reponse ou marqueur absent | Nouveau prompt Ask court, attendre Qwen, regarder les notifications et les nouvelles requetes LiteLLM |
 | WSL/SSH/Dev Container | Revenir a une fenetre locale : loopback et chemin du jeton peuvent viser une autre machine |
 

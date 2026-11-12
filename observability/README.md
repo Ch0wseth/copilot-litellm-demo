@@ -129,6 +129,20 @@ dashboard ont ete validees. Le comptage des appels filtre bien l'operation
 La recreation du conteneur a conserve les donnees des executions precedentes.
 Le parcours VS Code et les evenements Loki n'ont pas ete valides dans l'interface.
 
+### Verification realisee le 12 novembre 2026
+
+Avec Copilot CLI 1.0.109, le test reel a valide la reponse Qwen, les spans
+`invoke_agent` et `chat`, une metrique de tokens fraiche et les quatre
+panneaux avec des valeurs positives. La capture des contenus reste desactivee.
+
+Avec Copilot CLI 1.0.109, les appels LLM et leur duree sont exportes sous
+`gen_ai_client_inference_duration_seconds_*`, avec l'operation `chat`.
+`gen_ai_client_operation_duration_seconds_*` decrit alors `invoke_agent`.
+Les panneaux acceptent aussi l'ancien nom avec `chat` pour les versions
+precedentes, sans inclure les mesures d'orchestration. Si les tokens sont
+visibles mais pas les appels/durees, rechargez la stack pour provisionner
+la version corrigee du dashboard, puis rejouez le test.
+
 Pour une autre question :
 
 ```powershell

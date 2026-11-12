@@ -9,7 +9,7 @@ description: "Deployer et tester Ollama, LiteLLM, les cles individuelles, Copilo
 |-------|-------|------|
 | LiteLLM et cles individuelles | Etapes ci-dessous | API et CLI testes en local |
 | VS Code avec cle saisie manuellement | [Installation et rotation manuelles](vscode/README.md) | Reponse observee dans le Chat en mode Ask |
-| VS Code avec cle dynamique | [Installation de l'extension et du broker](vscode-dynamic-key-poc/README.md) | API du fournisseur validee ; Chat standard a valider |
+| VS Code avec cle dynamique | [Installation de l'extension et du broker](vscode-dynamic-key-poc/README.md) | Chat Local / Ask, fournisseur et revocation testes ; harness Copilot non valide avec le modele 8K |
 | Cle dynamique CLI et SDK | [Tests isoles](copilot-app-dynamic-key/README.md) | Serveur fictif local ; interface app non testee |
 | OpenTelemetry et Grafana | [Guide d'observabilite](observability/README.md) | Stack deployee ; traces/metriques CLI validees |
 | Webhooks globaux GitHub | [Scripts et scenario webhook](webhooks/README.md) | Recepteur local teste ; hook reel selon acces/HTTPS |
@@ -25,8 +25,10 @@ Pour installer la partie VS Code sur un autre poste, choisissez un seul parcours
 
 Le POC est une alternative au champ `"apiKey": "${get_api_key.py}"`, pas une
 prise en charge de cette syntaxe dans `chatLanguageModels.json`. Il ne faut
-pas confondre le test API du fournisseur et une conversation dans le Chat
-standard : cette derniere validation reste a effectuer pour le parcours dynamique.
+pas confondre le test API du fournisseur et une conversation dans le Chat :
+les deux ont ete valides, le parcours graphique en harness **Local / Ask**
+avec VS Code 1.146.0. Local est deprecie et son retrait est annonce pour
+fevrier 2027 ; la migration vers le harness Copilot reste a valider.
 
 Les scripts API sont en lecture seule. Les scripts de gestion des webhooks
 demandent une cible explicite et confirmation ; ils ne creent aucun acces admin.
@@ -71,8 +73,8 @@ en mode conteneurs Linux. Copilot CLI est necessaire pour le test CLI, VS Code
 pour le parcours graphique. Prevoyez plusieurs Go de disque et de RAM disponibles.
 Les poids du modele seuls representent environ 2,5 Go.
 
-L'extension a cle dynamique exige aussi Node.js 22 ou plus recent. Sa verification
-reelle a ete faite avec VS Code 1.145.0 ; ses commandes de test ne necessitent ni
+L'extension a cle dynamique exige aussi Node.js 22 ou plus recent. Son parcours
+Chat Local / Ask a ete teste avec VS Code 1.146.0 ; ses commandes de test ne necessitent ni
 Copilot CLI ni la GitHub Copilot app.
 
 Si le depot est deja clone, placez-vous a sa racine. Pour un premier clone
@@ -192,6 +194,35 @@ Le script s'arrete en erreur si un controle echoue. Le test CLI desactive les
 instructions personnalisees et les MCP integres pour limiter le contexte du
 petit modele. Il ne valide ni une session agent complexe ni l'interface VS Code.
 Le premier appel peut etre plus lent, car Ollama charge le modele en memoire.
+
+### Verification realisee le 12 novembre 2026
+
+Les tests reels de decouverte, refus de cle invalide, inference, streaming
+et Copilot CLI ont reussi. La route interne utilise maintenant
+`ollama_chat` pour separer le raisonnement Qwen de sa reponse finale ;
+la facade exposee aux clients reste compatible OpenAI. `/no_think` seul
+ne garantit pas l'absence de raisonnement sur toutes les versions d'Ollama.
+
+Le [test d'integration VS Code](vscode-dynamic-key-poc/README.md#integration-avec-le-vrai-vs-code-et-la-vraie-stack)
+est reproductible :
+
+```powershell
+.\vscode-dynamic-key-poc\scripts\test-provider.ps1
+```
+
+Il lance son propre broker : laissez le port 43128 libre. Il a valide
+deux reponses exactes via le vrai fournisseur VS Code et le refus effectif
+de sa cle apres arret du broker. Les sept tests Node couvrent aussi la
+rotation avec horloge simulee et les erreurs d'annulation/fermeture.
+**Le vrai Chat a aussi ete teste en Local / Ask** : selection de l'onglet
+**LiteLLM Dynamic Key POC**, choix de Qwen et deux reponses affichees
+exactement egales a `WORLDLINE_LOCAL_CHAT_OK` et `WORLDLINE_CHAT_FOLLOWUP_OK`.
+Deux appels LiteLLM HTTP `200` ont reussi avec une seule cle generee puis
+reutilisee par le broker. Aucune cle LiteLLM n'a ete saisie dans VS Code.
+Le harness **Copilot** avec BYOK experimental a refuse le prompt avant
+inference : systeme et outils depassaient le contexte 8K du modele.
+Le [guide du POC](vscode-dynamic-key-poc/README.md#7-parcours-valide-dans-le-chat-vs-code--local--ask)
+precise le parcours et le retrait de Local annonce pour fevrier 2027.
 
 ### Verification realisee le 19 octobre 2026
 
